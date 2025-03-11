@@ -550,6 +550,11 @@ ________________________________________________________________________________
             # copy packed extensions
             cp -vf ${WEBROOT}/*.tar.gz ${POSTGRES_PGLITE_OUT}
             cp -vf ${WEBROOT}/postgres.{js,data,wasm} ${POSTGRES_PGLITE_OUT}
+            pushd ${POSTGRES_PGLITE_OUT}
+            ln -s postgres.js pglite.js
+            ln -s postgres.data pglite.data
+            ln -s postgres.wasm pglite.wasm
+            popd
         ;;        
 
         pglite-bundle-interim) echo "================== pglite-bundle-interim ======================"
