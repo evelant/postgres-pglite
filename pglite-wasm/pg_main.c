@@ -535,6 +535,27 @@ __attribute__ ((export_name("pgl_backend")))
     }
 
 #ifdef PGL_MOBILE
+    /* Initialize critical globals for mobile library mode */
+    if (!progname) {
+        progname = "postgres";  // Safe fallback
+    }
+    
+    /* Ensure critical environment variables are set */
+    if (!getenv("PGSYSCONFDIR")) {
+        setenv("PGSYSCONFDIR", pr, 1);
+    }
+    if (!getenv("PGCLIENTENCODING")) setenv("PGCLIENTENCODING", "UTF8", 1);
+    if (!getenv("LC_CTYPE")) setenv("LC_CTYPE", "en_US.UTF-8", 1);
+    if (!getenv("TZ")) setenv("TZ", "UTC", 1);
+    if (!getenv("PGTZ")) setenv("PGTZ", "UTC", 1);
+    if (!getenv("PGDATABASE")) setenv("PGDATABASE", "template1", 1);
+    
+    #ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_INFO, "PGLitePG", "[pgl_backend] Mobile environment initialization complete");
+    #endif
+#endif
+
+#ifdef PGL_MOBILE
     /* Mobile communication methods will be installed after backend initialization */
     #ifdef __ANDROID__
     __android_log_print(ANDROID_LOG_ERROR, "PGLitePG", "[pgl_backend] *** Deferring mobile comm installation until backend is ready ***");
@@ -638,8 +659,18 @@ __attribute__ ((export_name("pgl_backend")))
 
     // Build resuming single-user argv dynamically to avoid empty args
     char *single_argv[24];
+    char __argv0_buf[STROPS_BUF];
+    const char* single_argv0;
+    if (g_argv && g_argv[0] && g_argv[0][0]) {
+        single_argv0 = g_argv[0];
+    } else {
+        const char* pr = (PREFIX && ((const char*)PREFIX)[0]) ? (const char*)PREFIX : WASM_PREFIX;
+        strconcat(__argv0_buf, pr, "/bin/postgres");
+        single_argv0 = __argv0_buf;
+        fprintf(stderr, "[pgl_backend] Using fallback argv0: %s\n", single_argv0);
+    }
     int single_argc = 0;
-    single_argv[single_argc++] = g_argv[0];
+    single_argv[single_argc++] = (char*)single_argv0;
     single_argv[single_argc++] = "--single";
     single_argv[single_argc++] = "-d"; single_argv[single_argc++] = "1";
     single_argv[single_argc++] = "-B"; single_argv[single_argc++] = "16";
@@ -647,6 +678,8 @@ __attribute__ ((export_name("pgl_backend")))
     single_argv[single_argc++] = "-f"; single_argv[single_argc++] = "siobtnmh";
     single_argv[single_argc++] = "-D"; single_argv[single_argc++] = (char*)PGDATA;
     single_argv[single_argc++] = "-F"; single_argv[single_argc++] = "-O"; single_argv[single_argc++] = "-j";
+    // Disable startup progress timers to avoid timeout machinery during existing db resume
+    single_argv[single_argc++] = "-c"; single_argv[single_argc++] = "log_startup_progress_interval=0";
     if (WASM_PGOPTS[0] != '\0') {
         single_argv[single_argc++] = (char*)WASM_PGOPTS;
     }
@@ -783,6 +816,12 @@ __attribute__ ((export_name("pgl_backend")))
         PGDATA = setdefault("PGDATA", _pgbuf);
     }
     fprintf(stderr, "[pgl_initdb] PREFIX=%s PGDATA=%s PGUSER=%s PGSYSCONFDIR=%s\n", PREFIX? (const char*)PREFIX : "", PGDATA? (const char*)PGDATA : "", PGUSER? (const char*)PGUSER : "", getenv("PGSYSCONFDIR")?getenv("PGSYSCONFDIR"):"");
+    
+    /* Initialize progname for mobile library mode */
+    if (!progname) {
+        progname = "postgres";
+    }
+    
     optind = 1;
     pgl_idb_status |= IDB_FAILED;
 
